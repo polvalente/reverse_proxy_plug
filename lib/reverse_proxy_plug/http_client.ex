@@ -33,6 +33,9 @@ defmodule ReverseProxyPlug.HTTPClient do
 
       Determines the end of the stream.
 
+  Keep in mind that the response is ignored for `:stream` responses,
+  so any errors will result in a timeout from the receive loop.
+
   If `:response_mode` is `:buffer`, the function's result will be treated as
   if it contains the complete response for the client.
   """
