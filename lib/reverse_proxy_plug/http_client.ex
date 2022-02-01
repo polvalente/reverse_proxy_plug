@@ -16,16 +16,20 @@ defmodule ReverseProxyPlug.HTTPClient do
   process referenced in the `:stream_to` option:
 
     * `%ReverseProxyPlug.HTTPClient.AsyncStatus{}`:
+
       Carries the response status code
 
     * `%ReverseProxyPlug.HTTPClient.AsyncHeaders{}`:
+
       Carries the response headers
 
     * `%ReverseProxyPlug.HTTPClient.AsyncChunk{}`:
+
       Carries a given chunk for the response, which will be immediately
       streamed to the client
 
     * `%ReverseProxyPlug.HTTPClient.AsyncEnd{}`:
+
       Determines the end of the stream.
 
   If `:response_mode` is `:buffer`, the function's result will be treated as

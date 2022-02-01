@@ -184,7 +184,7 @@ defmodule ReverseProxyPlug do
   @spec stream_response(Conn.t(), Keyword.t()) :: Conn.t()
   defp stream_response(conn, opts) do
     receive do
-      %HTTPClient.AsyncStatus{code: code} ->
+      %mod{code: code} when mod in [HTTPClient.AsyncStatus, HTTPoison.AsyncStatus] ->
         case opts[:status_callbacks][code] do
           nil ->
             conn
@@ -195,7 +195,7 @@ defmodule ReverseProxyPlug do
             handler.(conn, opts)
         end
 
-      %HTTPClient.AsyncHeaders{headers: headers} ->
+      %mod{headers: headers} when mod in [HTTPClient.AsyncHeaders, HTTPoison.AsyncHeaders] ->
         headers
         |> normalize_headers
         |> Enum.reject(fn {header, _} -> header == "content-length" end)
@@ -206,7 +206,7 @@ defmodule ReverseProxyPlug do
         |> Conn.send_chunked(conn.status)
         |> stream_response(opts)
 
-      %HTTPClient.AsyncChunk{chunk: chunk} ->
+      %mod{chunk: chunk} when mod in [HTTPClient.AsyncChunk, HTTPoison.AsyncChunk] ->
         case Conn.chunk(conn, chunk) do
           {:ok, conn} ->
             stream_response(conn, opts)
@@ -215,7 +215,7 @@ defmodule ReverseProxyPlug do
             conn
         end
 
-      %HTTPClient.AsyncEnd{} ->
+      %mod{} when mod in [HTTPClient.AsyncEnd, HTTPoison.AsyncEnd] ->
         conn
     end
   end
