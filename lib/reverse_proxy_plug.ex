@@ -8,6 +8,8 @@ defmodule ReverseProxyPlug do
   alias ReverseProxyPlug.HTTPClient
   import Plug.Conn, only: [fetch_cookies: 1]
 
+  @default_supported_response_modes [:buffer, :stream]
+
   @behaviour Plug
   @http_methods ["GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"]
 
@@ -31,7 +33,6 @@ defmodule ReverseProxyPlug do
     end
 
     opts
-    |> ensure_http_client()
     |> Keyword.merge(upstream_parts)
     |> Keyword.put_new(:client_options, [])
     |> Keyword.put_new(:response_mode, :stream)
@@ -40,6 +41,7 @@ defmodule ReverseProxyPlug do
       {m, f, a} -> {m, f, a}
       fun when is_function(fun) -> fun
     end)
+    |> ensure_http_client()
   end
 
   @spec call(Plug.Conn.t(), Keyword.t()) :: Plug.Conn.t()
@@ -411,6 +413,20 @@ defmodule ReverseProxyPlug do
 
   defp ensure_http_client(opts) do
     client = opts[:client] || Application.get_env(:reverse_proxy_plug, :http_client)
+
+    response_mode = opts[:response_mode]
+
+    supported_response_modes =
+      if function_exported?(client, :supported_response_modes, 0) do
+        client.supported_response_modes()
+      else
+        @default_supported_response_modes
+      end
+
+    if response_mode not in supported_response_modes do
+      raise ArgumentError,
+            ":response_mode unsupported. Got #{inspect(response_mode)}, expected one of: #{inspect(supported_response_modes)}"
+    end
 
     cond do
       not is_nil(client) ->

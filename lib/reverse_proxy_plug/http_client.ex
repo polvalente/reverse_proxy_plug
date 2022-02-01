@@ -3,6 +3,7 @@ defmodule ReverseProxyPlug.HTTPClient do
   Behaviour defining the HTTP client interface needed for reverse proxying.
   """
   @type error :: __MODULE__.Error.t()
+  @type response_mode :: :stream | :buffer
 
   @doc """
   Makes an HTTP request which can be either synchronous or chunked.
@@ -45,4 +46,9 @@ defmodule ReverseProxyPlug.HTTPClient do
                | __MODULE__.AsyncStatus.t()
                | __MODULE__.MaybeRedirect.t()}
               | {:error, error()}
+
+  @doc "Defines supported `:response_mode` values"
+  @callback supported_response_modes() :: [response_mode()]
+
+  @optional_callbacks [supported_response_modes: 0]
 end
