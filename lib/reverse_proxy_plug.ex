@@ -8,6 +8,8 @@ defmodule ReverseProxyPlug do
   alias ReverseProxyPlug.HTTPClient
   import Plug.Conn, only: [fetch_cookies: 1]
 
+  @default_supported_response_modes [:buffer, :stream]
+
   @behaviour Plug
   @http_methods ["GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"]
 
@@ -31,7 +33,6 @@ defmodule ReverseProxyPlug do
     end
 
     opts
-    |> ensure_http_client()
     |> Keyword.merge(upstream_parts)
     |> Keyword.put_new(:client_options, [])
     |> Keyword.put_new(:response_mode, :stream)
@@ -40,6 +41,7 @@ defmodule ReverseProxyPlug do
       {m, f, a} -> {m, f, a}
       fun when is_function(fun) -> fun
     end)
+    |> ensure_http_client()
   end
 
   @spec call(Plug.Conn.t(), Keyword.t()) :: Plug.Conn.t()
@@ -178,49 +180,45 @@ defmodule ReverseProxyPlug do
     |> Conn.resp(status, body)
   end
 
-  if {:module, HTTPoison} == Code.ensure_loaded(HTTPoison) do
-    # This section of the code is present for retrocompatibility
-    # for the case where HTTPoison is the underlying HTTP Client
-    defp process_response(:stream, conn, _resp, opts),
-      do: stream_response(conn, opts)
+  defp process_response(:stream, conn, _resp, opts),
+    do: stream_response(conn, opts)
 
-    @spec stream_response(Conn.t(), Keyword.t()) :: Conn.t()
-    defp stream_response(conn, opts) do
-      receive do
-        %HTTPoison.AsyncStatus{code: code} ->
-          case opts[:status_callbacks][code] do
-            nil ->
-              conn
-              |> Conn.put_status(code)
-              |> stream_response(opts)
+  @spec stream_response(Conn.t(), Keyword.t()) :: Conn.t()
+  defp stream_response(conn, opts) do
+    receive do
+      %mod{code: code} when mod in [HTTPClient.AsyncStatus, HTTPoison.AsyncStatus] ->
+        case opts[:status_callbacks][code] do
+          nil ->
+            conn
+            |> Conn.put_status(code)
+            |> stream_response(opts)
 
-            handler ->
-              handler.(conn, opts)
-          end
+          handler ->
+            handler.(conn, opts)
+        end
 
-        %HTTPoison.AsyncHeaders{headers: headers} ->
-          headers
-          |> normalize_headers
-          |> Enum.reject(fn {header, _} -> header == "content-length" end)
-          |> Enum.concat([{"transfer-encoding", "chunked"}])
-          |> Enum.reduce(conn, fn {header, value}, conn ->
-            Conn.put_resp_header(conn, header, value)
-          end)
-          |> Conn.send_chunked(conn.status)
-          |> stream_response(opts)
+      %mod{headers: headers} when mod in [HTTPClient.AsyncHeaders, HTTPoison.AsyncHeaders] ->
+        headers
+        |> normalize_headers
+        |> Enum.reject(fn {header, _} -> header == "content-length" end)
+        |> Enum.concat([{"transfer-encoding", "chunked"}])
+        |> Enum.reduce(conn, fn {header, value}, conn ->
+          Conn.put_resp_header(conn, header, value)
+        end)
+        |> Conn.send_chunked(conn.status)
+        |> stream_response(opts)
 
-        %HTTPoison.AsyncChunk{chunk: chunk} ->
-          case Conn.chunk(conn, chunk) do
-            {:ok, conn} ->
-              stream_response(conn, opts)
+      %mod{chunk: chunk} when mod in [HTTPClient.AsyncChunk, HTTPoison.AsyncChunk] ->
+        case Conn.chunk(conn, chunk) do
+          {:ok, conn} ->
+            stream_response(conn, opts)
 
-            {:error, :closed} ->
-              conn
-          end
+          {:error, :closed} ->
+            conn
+        end
 
-        %HTTPoison.AsyncEnd{} ->
-          conn
-      end
+      %mod{} when mod in [HTTPClient.AsyncEnd, HTTPoison.AsyncEnd] ->
+        conn
     end
   end
 
@@ -415,6 +413,20 @@ defmodule ReverseProxyPlug do
 
   defp ensure_http_client(opts) do
     client = opts[:client] || Application.get_env(:reverse_proxy_plug, :http_client)
+
+    response_mode = opts[:response_mode]
+
+    supported_response_modes =
+      if function_exported?(client, :supported_response_modes, 0) do
+        client.supported_response_modes()
+      else
+        @default_supported_response_modes
+      end
+
+    if response_mode not in supported_response_modes do
+      raise ArgumentError,
+            ":response_mode unsupported. Got #{inspect(response_mode)}, expected one of: #{inspect(supported_response_modes)}"
+    end
 
     cond do
       not is_nil(client) ->

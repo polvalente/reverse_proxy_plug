@@ -34,6 +34,11 @@ defmodule ReverseProxyPlugTest do
 
   setup :verify_on_exit!
 
+  setup do
+    stub(ReverseProxyPlug.HTTPClientMock, :supported_response_modes, fn -> [:stream, :buffer] end)
+    :ok
+  end
+
   test "receives buffer response" do
     headers = [{"host", "example.com"}, {"content-length", "42"}]
 
@@ -150,6 +155,28 @@ defmodule ReverseProxyPlugTest do
 
     refute "content-length" in resp_header_names,
            "deletes the content-length header"
+  end
+
+  test "validates support for a given response_mode" do
+    supported = [:buffer, :stream]
+
+    for response_mode <- supported do
+      valid = supported -- [response_mode]
+
+      expect(ReverseProxyPlug.HTTPClientMock, :supported_response_modes, fn ->
+        valid
+      end)
+
+      opts = Keyword.put(@opts, :response_mode, response_mode)
+
+      assert_raise ArgumentError,
+                   ":response_mode unsupported. Got #{inspect(response_mode)}, expected one of: #{inspect(valid)}",
+                   fn ->
+                     :get
+                     |> conn("/")
+                     |> ReverseProxyPlug.call(ReverseProxyPlug.init(opts))
+                   end
+    end
   end
 
   test "uses raw_body from assigns if body empty and raw_body present" do

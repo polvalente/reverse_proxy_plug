@@ -64,9 +64,13 @@ if Code.ensure_loaded?(HTTPoison) do
       {tag, translated_resp}
     end
 
-    defp translate_mod(HTTPoison.Response), do: HTTPClient.Response
+    defp translate_mod(HTTPoison.AsyncChunk), do: HTTPClient.AsyncChunk
+    defp translate_mod(HTTPoison.AsyncEnd), do: HTTPClient.AsyncEnd
+    defp translate_mod(HTTPoison.AsyncHeaders), do: HTTPClient.AsyncHeaders
     defp translate_mod(HTTPoison.AsyncResponse), do: HTTPClient.AsyncResponse
-    defp translate_mod(HTTPoison.MaybeRedirect), do: HTTPClient.MaybeRedirect
+    defp translate_mod(HTTPoison.AsyncStatus), do: HTTPClient.AsyncStatus
     defp translate_mod(HTTPoison.Error), do: HTTPClient.Error
+    defp translate_mod(HTTPoison.MaybeRedirect), do: HTTPClient.MaybeRedirect
+    defp translate_mod(HTTPoison.Response), do: HTTPClient.Response
   end
 end

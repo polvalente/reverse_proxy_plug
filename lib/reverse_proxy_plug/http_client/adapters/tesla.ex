@@ -16,6 +16,9 @@ if Code.ensure_loaded?(Tesla) do
     @behaviour HTTPClient
 
     @impl HTTPClient
+    def supported_response_modes, do: [:buffer]
+
+    @impl HTTPClient
     def request(%HTTPClient.Request{options: options} = request) do
       {client, opts} = Keyword.pop(options, :tesla_client)
 
